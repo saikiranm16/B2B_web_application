@@ -2,9 +2,13 @@ import "./globals.css";
 import { Inter, Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+export const metadata = {
+  title: "ProcureLink",
+  description: "B2B procurement marketplace for buyers and suppliers.",
+};
 
-const inter = Inter({ subsets: ["latin"] });
+const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export default function RootLayout({
   children,
@@ -12,8 +16,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
-      <body className={`${inter.className} bg-background text-foreground`}>
+    <html lang="en" className={cn("font-sans", geist.variable, inter.variable)}>
+      <body className="min-h-screen bg-background text-foreground">
         {children}
       </body>
     </html>

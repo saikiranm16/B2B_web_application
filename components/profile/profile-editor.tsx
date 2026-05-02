@@ -69,6 +69,10 @@ const emptyForm: ProfileFormState = {
   supplierType: "MANUFACTURER",
 };
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function ProfileEditor() {
   const router = useRouter();
 
@@ -139,8 +143,8 @@ export function ProfileEditor() {
             supplierType: data.supplierProfile?.supplierType || "MANUFACTURER",
           });
         }
-      } catch (err: any) {
-        setError(err.message || "Failed to load profile.");
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, "Failed to load profile."));
       } finally {
         setLoading(false);
       }
@@ -204,8 +208,8 @@ export function ProfileEditor() {
       });
 
       setSuccess("Profile saved successfully.");
-    } catch (err: any) {
-      setError(err.message || "Failed to update profile.");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Failed to update profile."));
     } finally {
       setSaving(false);
     }
