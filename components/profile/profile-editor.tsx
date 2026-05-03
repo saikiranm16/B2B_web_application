@@ -1,390 +1,265 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, ShieldCheck, UserRound } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { BadgeCheck, Globe2, ShieldCheck } from "lucide-react";
 
-import { apiFetch } from "@/lib/api";
+import { useMarketplaceSession } from "@/components/marketplace/app-shell";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-
-type BuyerProfile = {
-  companyName?: string | null;
-  location?: string | null;
-  aadhaar?: string | null;
-  pan?: string | null;
-  gst?: string | null;
-  cin?: string | null;
-  moa?: string | null;
-  workOrder?: string | null;
-};
-
-type SupplierProfile = {
-  companyName?: string | null;
-  location?: string | null;
-  gst?: string | null;
-  yearEstablished?: string | number | null;
-  supplierType?: string | null;
-};
-
-type ProfileResponse = {
-  id: string;
-  email: string;
-  role: "BUYER" | "SUPPLIER";
-  entityType?: string | null;
-  isVerified?: boolean;
-  kycStatus?: string | null;
-  tier?: string | null;
-  buyerProfile?: BuyerProfile | null;
-  supplierProfile?: SupplierProfile | null;
-};
-
-type ProfileFormState = {
-  companyName: string;
-  location: string;
-  aadhaar: string;
-  pan: string;
-  gst: string;
-  cin: string;
-  moa: string;
-  workOrder: string;
-  yearEstablished: string;
-  supplierType: string;
-};
-
-const emptyForm: ProfileFormState = {
-  companyName: "",
-  location: "",
-  aadhaar: "",
-  pan: "",
-  gst: "",
-  cin: "",
-  moa: "",
-  workOrder: "",
-  yearEstablished: "",
-  supplierType: "MANUFACTURER",
-};
+import {
+  CATEGORY_OPTIONS,
+  INDIA_STATES,
+  type SupplierType,
+  SUPPLIER_TYPE_OPTIONS,
+  saveCurrentProfile,
+} from "@/lib/marketplace";
 
 export function ProfileEditor() {
-  const router = useRouter();
-
-  const [profile, setProfile] = useState<ProfileResponse | null>(null);
-  const [form, setForm] = useState<ProfileFormState>(emptyForm);
-  const [loading, setLoading] = useState(true);
+  const { profile, refreshProfile, profileCompletion } = useMarketplaceSession();
   const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const isBuyer = profile?.role === "BUYER";
-  const isSupplier = profile?.role === "SUPPLIER";
-
-  const profileBadge = useMemo(() => {
-    if (!profile) {
-      return null;
-    }
-
-    return (
-      <div className="flex flex-wrap gap-2">
-        <Badge className="bg-[#1E3A5F] text-white hover:bg-[#1E3A5F]">
-          {profile.role}
-        </Badge>
-        <Badge variant="secondary">{profile.tier || "FREE"}</Badge>
-        <Badge variant={profile.isVerified ? "default" : "outline"}>
-          {profile.isVerified ? "Verified" : "Pending"}
-        </Badge>
-        <Badge variant="outline">KYC {profile.kycStatus || "PENDING"}</Badge>
-      </div>
-    );
-  }, [profile]);
+  const [form, setForm] = useState({
+    fullName: "",
+    companyName: "",
+    city: "",
+    state: "",
+    gst: "",
+    supplierType: "MANUFACTURER" as SupplierType,
+    productCategories: [] as string[],
+    reachStates: [] as string[],
+  });
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-
-    if (!token) {
-      router.push("/signin");
+    if (!profile) {
       return;
     }
 
-    const loadProfile = async () => {
-      try {
-        setLoading(true);
-        const data = await apiFetch("/api/me");
-        setProfile(data);
+    setForm({
+      fullName: profile.fullName,
+      companyName: profile.companyName,
+      city: profile.city,
+      state: profile.state,
+      gst: profile.gst,
+      supplierType: profile.supplierType || "MANUFACTURER",
+      productCategories: profile.productCategories || [],
+      reachStates: profile.reachStates || [],
+    });
+  }, [profile]);
 
-        if (data.role === "BUYER") {
-          setForm({
-            ...emptyForm,
-            companyName: data.buyerProfile?.companyName || "",
-            location: data.buyerProfile?.location || "",
-            aadhaar: data.buyerProfile?.aadhaar || "",
-            pan: data.buyerProfile?.pan || "",
-            gst: data.buyerProfile?.gst || "",
-            cin: data.buyerProfile?.cin || "",
-            moa: data.buyerProfile?.moa || "",
-            workOrder: data.buyerProfile?.workOrder || "",
-          });
-        }
+  if (!profile) {
+    return null;
+  }
 
-        if (data.role === "SUPPLIER") {
-          setForm({
-            ...emptyForm,
-            companyName: data.supplierProfile?.companyName || "",
-            location: data.supplierProfile?.location || "",
-            gst: data.supplierProfile?.gst || "",
-            yearEstablished: data.supplierProfile?.yearEstablished?.toString() || "",
-            supplierType: data.supplierProfile?.supplierType || "MANUFACTURER",
-          });
-        }
-      } catch (err: any) {
-        setError(err.message || "Failed to load profile.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadProfile();
-  }, [router]);
-
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = event.target;
-    setForm((current) => ({ ...current, [name]: value }));
-    if (error) setError("");
-    if (success) setSuccess("");
+  const toggleValue = (key: "productCategories" | "reachStates", value: string) => {
+    setForm((current) => ({
+      ...current,
+      [key]: current[key].includes(value)
+        ? current[key].filter((item) => item !== value)
+        : [...current[key], value],
+    }));
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-
-    if (!profile) {
-      setError("Profile is not loaded yet.");
-      return;
-    }
-
+  const saveProfile = async () => {
     try {
       setSaving(true);
       setError("");
-      setSuccess("");
-
-      const payload = profile.role === "BUYER"
-        ? {
-            companyName: form.companyName,
-            location: form.location,
-            aadhaar: form.aadhaar,
-            pan: form.pan,
-            gst: form.gst,
-            cin: form.cin,
-            moa: form.moa,
-            workOrder: form.workOrder,
-          }
-        : {
-            companyName: form.companyName,
-            location: form.location,
-            gst: form.gst,
-            yearEstablished: form.yearEstablished ? Number(form.yearEstablished) : undefined,
-            supplierType: form.supplierType,
-          };
-
-      const updated = await apiFetch("/api/me", {
-        method: "PUT",
-        body: JSON.stringify(payload),
+      setMessage("");
+      await saveCurrentProfile({
+        fullName: form.fullName,
+        companyName: form.companyName,
+        city: form.city,
+        state: form.state,
+        gst: form.gst,
+        workOrderTypes: profile.workOrderTypes,
+        supplierType: profile.role === "SUPPLIER" ? form.supplierType : undefined,
+        productCategories: profile.role === "SUPPLIER" ? form.productCategories : undefined,
+        reachStates: profile.role === "SUPPLIER" ? form.reachStates : undefined,
+        documents: profile.documents,
+        onboardingCompleted: profile.onboardingCompleted,
       });
-
-      setProfile((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return current.role === "BUYER"
-          ? { ...current, buyerProfile: updated }
-          : { ...current, supplierProfile: updated };
-      });
-
-      setSuccess("Profile saved successfully.");
-    } catch (err: any) {
-      setError(err.message || "Failed to update profile.");
+      await refreshProfile();
+      setMessage("Profile saved.");
+    } catch (nextError: any) {
+      setError(nextError?.message || "Failed to save profile.");
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-          <Loader2 className="h-5 w-5 animate-spin text-[#2563EB]" />
-          <p className="text-sm font-medium text-slate-700">Loading profile...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 px-4 py-8">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div className="flex items-center justify-between gap-4">
-          <Link href="/dashboard">
-            <Button variant="outline" className="gap-2 rounded-lg border-slate-200">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Dashboard
-            </Button>
-          </Link>
+    <div className="space-y-6">
+      <Card className="border-white/80 bg-white/85 p-7 shadow-xl">
+        <div className="flex flex-wrap items-start justify-between gap-6">
+          <div className="max-w-2xl">
+            <Badge className="bg-[#10213d] text-white hover:bg-[#10213d]">Company profile</Badge>
+            <h2 className="mt-4 text-2xl font-semibold text-slate-950">Public trust and company profile</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Keep the core identity fields clean, update supplier discoverability, and maintain the same details
+              shown across the dashboard and requirement workflow.
+            </p>
+          </div>
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+            <p className="text-sm text-slate-500">Completion</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-950">{profileCompletion}%</p>
+            <p className="mt-2 text-sm text-slate-600">Profile views: {profile.profileViews}</p>
+          </div>
         </div>
+      </Card>
 
-        <Card className="overflow-hidden border-0 shadow-xl">
-          <div className="bg-linear-to-r from-[#1E3A5F] to-[#2563EB] px-8 py-8 text-white">
-            <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15">
-                <UserRound className="h-7 w-7" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold">Profile</h1>
-                <p className="mt-1 text-sm text-blue-100">View and update your account details</p>
-              </div>
-            </div>
+      {message ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div> : null}
+      {error ? <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,1fr)]">
+        <Card className="border-white/80 bg-white/85 p-7 shadow-xl">
+          <div className="grid gap-5 md:grid-cols-2">
+            <Field label="Full name">
+              <Input className="h-11" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
+            </Field>
+            <Field label="Company name">
+              <Input className="h-11" value={form.companyName} onChange={(event) => setForm({ ...form, companyName: event.target.value })} />
+            </Field>
+            <Field label="City">
+              <Input className="h-11" value={form.city} onChange={(event) => setForm({ ...form, city: event.target.value })} />
+            </Field>
+            <Field label="State">
+              <select
+                value={form.state}
+                onChange={(event) => setForm({ ...form, state: event.target.value })}
+                className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]"
+              >
+                <option value="">Select state</option>
+                {INDIA_STATES.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="GST">
+              <Input className="h-11" value={form.gst} onChange={(event) => setForm({ ...form, gst: event.target.value.toUpperCase() })} />
+            </Field>
+            {profile.role === "SUPPLIER" ? (
+              <Field label="Supplier type">
+                <select
+                  value={form.supplierType}
+                  onChange={(event) => setForm({ ...form, supplierType: event.target.value })}
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]"
+                >
+                  {SUPPLIER_TYPE_OPTIONS.map((type) => (
+                    <option key={type} value={type}>
+                      {type.replaceAll("_", " ")}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
           </div>
 
-          <div className="space-y-8 bg-white px-8 py-8">
-            <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">Account Email</p>
-                  <p className="text-lg font-semibold text-slate-900">{profile?.email}</p>
-                </div>
-                {profileBadge}
-              </div>
+          {profile.role === "SUPPLIER" ? (
+            <div className="mt-8 space-y-6 border-t border-slate-200 pt-6">
+              <TagGroup label="Product categories" values={CATEGORY_OPTIONS} selected={form.productCategories} onToggle={(value) => toggleValue("productCategories", value)} />
+              <TagGroup label="Geographic supply reach" values={INDIA_STATES} selected={form.reachStates} onToggle={(value) => toggleValue("reachStates", value)} />
             </div>
+          ) : null}
 
-            {error ? (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
-              </div>
-            ) : null}
-
-            {success ? (
-              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-                {success}
-              </div>
-            ) : null}
-
-            <form onSubmit={handleSubmit} className="space-y-8">
-              <div className="grid gap-5 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold text-slate-700">Company Name</Label>
-                  <Input
-                    name="companyName"
-                    value={form.companyName}
-                    onChange={handleChange}
-                    placeholder="Enter company name"
-                    className="h-11 rounded-lg border-slate-200 focus:border-[#2563EB] focus:ring-[#2563EB]"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold text-slate-700">Location</Label>
-                  <Input
-                    name="location"
-                    value={form.location}
-                    onChange={handleChange}
-                    placeholder="Enter location"
-                    className="h-11 rounded-lg border-slate-200 focus:border-[#2563EB] focus:ring-[#2563EB]"
-                  />
-                </div>
-              </div>
-
-              {isBuyer ? (
-                <div className="space-y-6 rounded-2xl border border-slate-200 p-6">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-5 w-5 text-[#2563EB]" />
-                    <h2 className="text-lg font-semibold text-slate-900">Buyer Details</h2>
-                  </div>
-
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold text-slate-700">Aadhaar</Label>
-                      <Input name="aadhaar" value={form.aadhaar} onChange={handleChange} placeholder="Aadhaar number" className="h-11 rounded-lg border-slate-200 focus:border-[#2563EB] focus:ring-[#2563EB]" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold text-slate-700">PAN</Label>
-                      <Input name="pan" value={form.pan} onChange={handleChange} placeholder="PAN number" className="h-11 rounded-lg border-slate-200 focus:border-[#2563EB] focus:ring-[#2563EB]" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold text-slate-700">GST</Label>
-                      <Input name="gst" value={form.gst} onChange={handleChange} placeholder="GST number" className="h-11 rounded-lg border-slate-200 focus:border-[#2563EB] focus:ring-[#2563EB]" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold text-slate-700">CIN</Label>
-                      <Input name="cin" value={form.cin} onChange={handleChange} placeholder="CIN number" className="h-11 rounded-lg border-slate-200 focus:border-[#2563EB] focus:ring-[#2563EB]" />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label className="text-sm font-semibold text-slate-700">MOA</Label>
-                      <Input name="moa" value={form.moa} onChange={handleChange} placeholder="MOA reference" className="h-11 rounded-lg border-slate-200 focus:border-[#2563EB] focus:ring-[#2563EB]" />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label className="text-sm font-semibold text-slate-700">Work Order</Label>
-                      <Input name="workOrder" value={form.workOrder} onChange={handleChange} placeholder="Work order reference" className="h-11 rounded-lg border-slate-200 focus:border-[#2563EB] focus:ring-[#2563EB]" />
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              {isSupplier ? (
-                <div className="space-y-6 rounded-2xl border border-slate-200 p-6">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-5 w-5 text-[#2563EB]" />
-                    <h2 className="text-lg font-semibold text-slate-900">Supplier Details</h2>
-                  </div>
-
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold text-slate-700">GST</Label>
-                      <Input name="gst" value={form.gst} onChange={handleChange} placeholder="GST number" className="h-11 rounded-lg border-slate-200 focus:border-[#2563EB] focus:ring-[#2563EB]" />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold text-slate-700">Year Established</Label>
-                      <Input name="yearEstablished" value={form.yearEstablished} onChange={handleChange} placeholder="e.g. 2018" inputMode="numeric" className="h-11 rounded-lg border-slate-200 focus:border-[#2563EB] focus:ring-[#2563EB]" />
-                    </div>
-
-                    <div className="space-y-2 md:col-span-2">
-                      <Label className="text-sm font-semibold text-slate-700">Supplier Type</Label>
-                      <select
-                        name="supplierType"
-                        value={form.supplierType}
-                        onChange={handleChange}
-                        className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 focus:border-[#2563EB] focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-                      >
-                        <option value="MANUFACTURER">Manufacturer</option>
-                        <option value="TRADER">Trader</option>
-                        <option value="SERVICE_PROVIDER">Service Provider</option>
-                        <option value="DISTRIBUTOR">Distributor</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                <Link href="/dashboard">
-                  <Button type="button" variant="outline" className="h-11 rounded-lg border-slate-200 px-6 font-semibold text-slate-700">
-                    Cancel
-                  </Button>
-                </Link>
-                <Button
-                  type="submit"
-                  disabled={saving}
-                  className="h-11 rounded-lg px-6 font-semibold text-white"
-                  style={{ backgroundColor: saving ? "#94a3b8" : "#2563EB" }}
-                >
-                  {saving ? "Saving..." : "Save Profile"}
-                </Button>
-              </div>
-            </form>
+          <div className="mt-8 flex justify-end">
+            <Button className="bg-[#2563EB] text-white hover:bg-[#1d4ed8]" onClick={saveProfile} disabled={saving}>
+              {saving ? "Saving..." : "Save profile"}
+            </Button>
           </div>
         </Card>
+
+        <div className="space-y-6">
+          <Card className="border-white/80 bg-white/85 p-6 shadow-xl">
+            <p className="text-sm font-semibold text-slate-900">Trust summary</p>
+            <div className="mt-4 space-y-3">
+              <SummaryRow icon={<BadgeCheck className="size-4 text-emerald-600" />} label="Email verification" value={profile.isVerified ? "Verified" : "Pending"} />
+              <SummaryRow icon={<ShieldCheck className="size-4 text-[#2563EB]" />} label="KYC status" value={profile.kycStatus} />
+              <SummaryRow icon={<Globe2 className="size-4 text-indigo-600" />} label="Account tier" value={profile.tier} />
+            </div>
+          </Card>
+
+          <Card className="border-white/80 bg-white/85 p-6 shadow-xl">
+            <p className="text-sm font-semibold text-slate-900">Documents</p>
+            <div className="mt-4 space-y-3">
+              {profile.documents?.length ? (
+                profile.documents.map((document) => (
+                  <div key={document.label} className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="font-medium text-slate-900">{document.label}</p>
+                    <p className="mt-1 text-sm text-slate-500">{document.fileName}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-[20px] border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                  No document placeholders recorded yet.
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-semibold text-slate-700">{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function SummaryRow({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="flex items-center gap-3">
+        {icon}
+        <p className="text-sm text-slate-600">{label}</p>
+      </div>
+      <p className="text-sm font-medium text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function TagGroup({
+  label,
+  values,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  values: string[];
+  selected: string[];
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <div>
+      <Label className="text-sm font-semibold text-slate-700">{label}</Label>
+      <div className="mt-3 flex flex-wrap gap-3">
+        {values.map((value) => {
+          const active = selected.includes(value);
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onToggle(value)}
+              className={`rounded-full border px-4 py-2 text-sm transition ${
+                active
+                  ? "border-blue-200 bg-blue-50 text-blue-700"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+              }`}
+            >
+              {value}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
